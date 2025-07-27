@@ -14,6 +14,10 @@ on:
       - '**.ps1'
       - '.github/workflows/**'
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   test-linux-script:
     runs-on: ubuntu-latest
