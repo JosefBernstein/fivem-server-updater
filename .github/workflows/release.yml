@@ -103,8 +103,16 @@ jobs:
 
       - name: Create Linux archive
         run: |
-          # Erstelle tar.gz-Archiv mit allen wichtigen Dateien außer .git und .github
-          tar -czf fivem-update-linux.tar.gz --exclude='.git' --exclude='.github' --exclude='*.zip' --exclude='*.tar.gz' .
+          # Create tar.gz archive with all important files except .git and .github
+          # Create archive in parent directory to avoid "file changed as we read it" errors
+          mkdir -p ../temp-linux-release
+          cp -r . ../temp-linux-release/
+          cd ../temp-linux-release
+          rm -rf .git .github *.zip *.tar.gz temp-*
+          tar -czf ../fivem-update-linux.tar.gz .
+          cd -
+          mv ../fivem-update-linux.tar.gz .
+          rm -rf ../temp-linux-release
 
       - name: Upload Linux Release Asset
         run: |
@@ -126,8 +134,12 @@ jobs:
 
       - name: Create Windows archive
         run: |
-          # Erstelle ZIP-Archiv mit allen wichtigen Dateien außer .git und .github
-          Compress-Archive -Path "." -DestinationPath "fivem-update-windows.zip" -Exclude ".git", ".github", "*.zip"
+          # Create ZIP archive with all important files except .git and .github
+          # PowerShell Compress-Archive doesn't support -Exclude, so we copy files to temp directory first
+          $tempDir = New-Item -ItemType Directory -Path "temp-windows-release" -Force
+          Get-ChildItem -Path "." -Exclude ".git", ".github", "*.zip", "*.tar.gz", "temp-*" | Copy-Item -Destination $tempDir -Recurse -Force
+          Compress-Archive -Path "$tempDir\*" -DestinationPath "fivem-update-windows.zip" -Force
+          Remove-Item -Path $tempDir -Recurse -Force
 
       - name: Upload Windows Release Asset
         run: |
