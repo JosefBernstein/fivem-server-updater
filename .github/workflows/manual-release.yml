@@ -107,7 +107,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ inputs.version }}
-          release_name: "FiveM Server Update Scripts ${{ inputs.version }}"
+          release_name: "${{ inputs.version }}"
           body: ${{ steps.release_notes.outputs.notes }}
           draft: false
           prerelease: ${{ inputs.prerelease }}

@@ -56,7 +56,7 @@ jobs:
         run: |
           TAG=${{ steps.tag.outputs.tag }}
           gh release create "$TAG" \
-            --title "FiveM Server Update Scripts $TAG" \
+            --title "$TAG" \
             --notes "## 🚀 FiveM Server Update Scripts Release
           
           **Commit:** ${{ steps.commit_info.outputs.commit_msg }}
