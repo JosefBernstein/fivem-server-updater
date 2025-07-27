@@ -1,0 +1,27 @@
+# Stelle sicher, dass Shell-Scripts immer LF verwenden
+*.sh text eol=lf
+
+# PowerShell-Scripts können CRLF verwenden  
+*.ps1 text eol=crlf
+
+# Andere Textdateien: automatische Konvertierung
+*.md text
+*.yml text
+*.yaml text
+*.json text
+
+# Binärdateien nicht konvertieren
+*.zip binary
+*.tar.gz binary
+*.exe binary
+*.7z binary
+*.gz binary
+*.xz binary
+
+# GitHub Actions Workflows sollten LF verwenden
+.github/workflows/*.yml text eol=lf
+.github/workflows/*.yaml text eol=lf
+
+# Git-spezifische Dateien
+.gitignore text
+.gitattributes text

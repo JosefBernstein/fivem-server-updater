@@ -1,0 +1,249 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      release_notes:
+        description: 'Custom release notes'
+        required: false
+        type: string
+
+jobs:
+  manual-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+      tag: ${{ inputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "❌ Error: Version must start with 'v' and follow semantic versioning (e.g., v1.2.3)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: ${{ inputs.version }}"
+
+      - name: Check if tag already exists
+        run: |
+          if git tag | grep -q "^${{ inputs.version }}$"; then
+            echo "❌ Error: Tag ${{ inputs.version }} already exists!"
+            exit 1
+          fi
+          echo "✅ Tag ${{ inputs.version }} is available"
+
+      - name: Get latest commit info
+        id: commit_info
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_msg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+          echo "commit_date=$(git log -1 --pretty=format:'%ci')" >> $GITHUB_OUTPUT
+
+      - name: Prepare release notes
+        id: release_notes
+        run: |
+          if [ -n "${{ inputs.release_notes }}" ]; then
+            NOTES="${{ inputs.release_notes }}"
+          else
+            NOTES="Manual release of FiveM Server Update Scripts"
+          fi
+          
+          FULL_NOTES="## 🚀 FiveM Server Update Scripts Release ${{ inputs.version }}
+          
+          $NOTES
+          
+          **Commit:** ${{ steps.commit_info.outputs.commit_msg }}
+          **SHA:** \`${{ steps.commit_info.outputs.sha_short }}\`
+          **Date:** ${{ steps.commit_info.outputs.commit_date }}
+          
+          ### 📦 Available Downloads
+          - **Linux:** \`update_linux.sh\` - Bash script for Linux systems
+          - **Windows:** \`update_windows.ps1\` - PowerShell script for Windows systems
+          
+          ### 🔧 Usage
+          
+          **Linux:**
+          \`\`\`bash
+          chmod +x update_linux.sh
+          ./update_linux.sh -fed
+          \`\`\`
+          
+          **Windows:**
+          \`\`\`powershell
+          .\update_windows.ps1 -Extract -Force -Delete
+          \`\`\`
+          
+          ### ✨ Features
+          - 🔄 Automatic FiveM server download
+          - 🏗️ Cross-platform support
+          - 📦 Multiple extraction methods
+          - 🧹 Optional cleanup
+          - 🎯 Version targeting
+          - 🚀 Fully automated mode
+          
+          ---
+          *Manual release created from commit ${{ steps.commit_info.outputs.sha_short }}*"
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$FULL_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ inputs.version }}
+          release_name: "FiveM Server Update Scripts ${{ inputs.version }}"
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
+
+  build-linux:
+    needs: manual-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Linux release
+        run: |
+          mkdir -p release-linux
+          cp update_linux.sh release-linux/
+          chmod +x release-linux/update_linux.sh
+          
+          cat > release-linux/install.sh << 'EOF'
+          #!/bin/bash
+          echo "🐧 FiveM Server Update Script - Linux Installation"
+          echo "=================================================="
+          chmod +x update_linux.sh
+          echo "✅ Installation complete!"
+          echo ""
+          echo "Usage examples:"
+          echo "  ./update_linux.sh                    # Interactive mode"
+          echo "  ./update_linux.sh -fed               # Auto extract, force download, delete archive"
+          echo "  ./update_linux.sh --version 1234     # Download specific version"
+          echo "  ./update_linux.sh --help             # Show help"
+          EOF
+          
+          chmod +x release-linux/install.sh
+          cp README.md release-linux/
+
+      - name: Create Linux archive
+        run: |
+          cd release-linux
+          tar -czf ../fivem-update-linux.tar.gz .
+          cd ..
+          sha256sum fivem-update-linux.tar.gz > fivem-update-linux.tar.gz.sha256
+
+      - name: Upload Linux Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./fivem-update-linux.tar.gz
+          asset_name: fivem-update-linux.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Linux Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./fivem-update-linux.tar.gz.sha256
+          asset_name: fivem-update-linux.tar.gz.sha256
+          asset_content_type: text/plain
+
+      - name: Upload Linux Script
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./update_linux.sh
+          asset_name: update_linux.sh
+          asset_content_type: text/plain
+
+  build-windows:
+    needs: manual-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Windows release
+        run: |
+          New-Item -ItemType Directory -Path "release-windows" -Force
+          Copy-Item "update_windows.ps1" "release-windows/"
+          
+          @"
+          # FiveM Server Update Script - Windows Installation
+          Write-Host "🪟 FiveM Server Update Script - Windows Installation" -ForegroundColor Cyan
+          Write-Host "======================================================" -ForegroundColor Cyan
+          
+          `$currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+          if (`$currentPolicy -eq "Restricted") {
+              Write-Host "⚠️  Setting execution policy..." -ForegroundColor Yellow
+              Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+              Write-Host "✅ Execution policy updated!" -ForegroundColor Green
+          } else {
+              Write-Host "✅ Execution policy is already configured!" -ForegroundColor Green
+          }
+          
+          Write-Host "✅ Installation complete!" -ForegroundColor Green
+          Write-Host "Usage examples:" -ForegroundColor White
+          Write-Host "  .\update_windows.ps1 -Extract -Force -Delete   # Full auto mode" -ForegroundColor Gray
+          "@ | Out-File -FilePath "release-windows/install.ps1" -Encoding UTF8
+          
+          Copy-Item "README.md" "release-windows/"
+
+      - name: Create Windows archive
+        run: |
+          Compress-Archive -Path "release-windows\*" -DestinationPath "fivem-update-windows.zip"
+          $hash = Get-FileHash -Path "fivem-update-windows.zip" -Algorithm SHA256
+          "$($hash.Hash)  fivem-update-windows.zip" | Out-File -FilePath "fivem-update-windows.zip.sha256" -Encoding ASCII
+
+      - name: Upload Windows Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./fivem-update-windows.zip
+          asset_name: fivem-update-windows.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./fivem-update-windows.zip.sha256
+          asset_name: fivem-update-windows.zip.sha256
+          asset_content_type: text/plain
+
+      - name: Upload Windows Script
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.manual-release.outputs.upload_url }}
+          asset_path: ./update_windows.ps1
+          asset_name: update_windows.ps1
+          asset_content_type: text/plain

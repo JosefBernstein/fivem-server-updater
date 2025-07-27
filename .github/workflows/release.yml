@@ -1,0 +1,151 @@
+name: Create Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      release_created: ${{ steps.check_release.outputs.exists == 'false' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest commit info
+        id: commit_info
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_msg=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+          echo "commit_date=$(git log -1 --pretty=format:'%ci')" >> $GITHUB_OUTPUT
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          # Generate tag based on date and short commit SHA
+          TAG="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release $TAG does not exist"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release with GitHub CLI
+        id: create_release
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          TAG=${{ steps.tag.outputs.tag }}
+          gh release create "$TAG" \
+            --title "FiveM Server Update Scripts $TAG" \
+            --notes "## 🚀 FiveM Server Update Scripts Release
+          
+          **Commit:** ${{ steps.commit_info.outputs.commit_msg }}
+          **SHA:** \`${{ steps.commit_info.outputs.sha_short }}\`
+          **Date:** ${{ steps.commit_info.outputs.commit_date }}
+          
+          ### 📦 Available Downloads
+          - **Linux:** \`update_linux.sh\` - Bash script for Linux systems
+          - **Windows:** \`update_windows.ps1\` - PowerShell script for Windows systems
+          
+          ### 🔧 Usage
+          
+          **Linux:**
+          \`\`\`bash
+          chmod +x update_linux.sh
+          ./update_linux.sh -fed
+          \`\`\`
+          
+          **Windows:**
+          \`\`\`powershell
+          .\update_windows.ps1 -Extract -Force -Delete
+          \`\`\`
+          
+          ### ✨ Features
+          - 🔄 Automatic FiveM server download
+          - 🏗️ Cross-platform support
+          - 📦 Multiple extraction methods
+          - 🧹 Optional cleanup
+          - 🎯 Version targeting
+          - 🚀 Fully automated mode
+          
+          ---
+          *Automatically generated from commit ${{ steps.commit_info.outputs.sha_short }}*"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: needs.create-release.outputs.release_created == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Linux archive
+        run: |
+          # Erstelle tar.gz-Archiv mit allen wichtigen Dateien außer .git und .github
+          tar -czf fivem-update-linux.tar.gz --exclude='.git' --exclude='.github' --exclude='*.zip' --exclude='*.tar.gz' .
+
+      - name: Upload Linux Release Asset
+        run: |
+          TAG=${{ needs.create-release.outputs.tag }}
+          gh release upload "$TAG" fivem-update-linux.tar.gz
+          
+          # Upload standalone script
+          gh release upload "$TAG" update_linux.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    if: needs.create-release.outputs.release_created == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Windows archive
+        run: |
+          # Erstelle ZIP-Archiv mit allen wichtigen Dateien außer .git und .github
+          Compress-Archive -Path "." -DestinationPath "fivem-update-windows.zip" -Exclude ".git", ".github", "*.zip"
+
+      - name: Upload Windows Release Asset
+        run: |
+          $TAG = "${{ needs.create-release.outputs.tag }}"
+          gh release upload "$TAG" fivem-update-windows.zip
+          
+          # Upload standalone script
+          gh release upload "$TAG" update_windows.ps1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-summary:
+    needs: [create-release, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: always() && needs.create-release.outputs.release_created == 'true'
+    steps:
+      - name: Release Summary
+        run: |
+          echo "✅ Successfully created release ${{ needs.create-release.outputs.tag }}"
+          echo "📁 Archives: fivem-update-linux.tar.gz, fivem-update-windows.zip"
+          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.create-release.outputs.tag }}"
