@@ -20,9 +20,9 @@ Cross-platform scripts for automatically downloading and installing the latest F
 
 1. Download the script:
 ```bash
-wget https://your-repo.com/update_linux.sh
+wget https://github.com/JosefBernstein/fivem-server-updater/update_linux.sh
 # or
-curl -O https://your-repo.com/update_linux.sh
+curl -O https://github.com/JosefBernstein/fivem-server-updater/update_linux.sh
 ```
 
 2. Make it executable:
@@ -35,7 +35,7 @@ chmod +x update_linux.sh
 1. Download the PowerShell script:
 ```powershell
 # Download to current directory
-Invoke-WebRequest -Uri "https://your-repo.com/update_windows.ps1" -OutFile "update_windows.ps1"
+Invoke-WebRequest -Uri "https://github.com/JosefBernstein/fivem-server-updater/update_windows.ps1" -OutFile "update_windows.ps1"
 ```
 
 2. Allow script execution (if needed):
